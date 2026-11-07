@@ -1,0 +1,42 @@
+{
+  "name": "deepsounds",
+  "version": "0.10.0",
+  "private": true,
+  "type": "module",
+  "description": "在 DSH 收听网易云音乐和小宇宙播客，观看哔哩哔哩视频。",
+  "license": "UNLICENSED",
+  "icon": "./icon.svg",
+  "main": "./lib/index.js",
+  "exports": {
+    ".": "./lib/index.js",
+    "./client": "./lib/client.js",
+    "./locale/*.json": "./locale/*.json",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "lib",
+    "locale",
+    "web",
+    "icon.svg",
+    "cordis.patch.yml",
+    "README.md"
+  ],
+  "engines": {
+    "node": ">=22.19",
+    "dsh": ">=0.2.0-0 <0.3.0"
+  },
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "platform": "web",
+      "inject": []
+    }
+  },
+  "scripts": {
+    "test": "node --test",
+    "serve": "node scripts/serve.mjs",
+    "package": "node -e \"require('node:fs').mkdirSync('dist',{recursive:true})\" && npm pack --pack-destination dist"
+  }
+}
