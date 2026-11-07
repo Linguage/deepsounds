@@ -44,18 +44,27 @@ export function accountPanel({ onLogin, onLogout, scope = 'netease' }) {
   let token;
   let pending;
   let restoring = false;
+  let restoreFailed = false;
 
-  function remember(value) {
+  function remember(value, previous) {
+    let persisted = false;
     try {
-      if (value) sessionStorage.setItem(storageKey, value);
-      else sessionStorage.removeItem(storageKey);
-    } catch { /* Login still works when the browser disables session storage. */ }
+      if (value) {
+        localStorage.setItem(storageKey, value);
+        persisted = true;
+      } else if (localStorage.getItem(storageKey) === previous) localStorage.removeItem(storageKey);
+    } catch { /* Login still works when the browser disables persistent storage. */ }
+    try {
+      if (value && !persisted) sessionStorage.setItem(storageKey, value);
+      else if (persisted || sessionStorage.getItem(storageKey) === previous) sessionStorage.removeItem(storageKey);
+    } catch { /* Some browsers disable all storage. */ }
   }
 
   function showProfile(profile) {
     name.hidden = !profile;
     name.textContent = profile?.name ?? '';
     action.textContent = profile ? '退出登录' : '扫码登录';
+    action.removeAttribute('title');
   }
 
   const post = (path, id) => request(apiPrefix + 'login/' + path, null, { token: id, method: 'POST' });
@@ -80,13 +89,26 @@ export function accountPanel({ onLogin, onLogout, scope = 'netease' }) {
     onLogin(profile);
   }
 
-  function signOut(expired = false) {
-    const id = token;
+  function signedOut(expired) {
+    remember(undefined, token);
     token = undefined;
-    remember();
     showProfile(null);
-    revoke(id);
     onLogout(expired);
+  }
+
+  async function signOut() {
+    action.disabled = true;
+    const id = token;
+    try {
+      await post('clear', id);
+      if (token === id) signedOut(false);
+    } catch (error) {
+      if (token !== id) return;
+      action.textContent = '重试退出登录';
+      action.title = error.message;
+    } finally {
+      action.disabled = false;
+    }
   }
 
   function fail(message) {
@@ -119,6 +141,7 @@ export function accountPanel({ onLogin, onLogout, scope = 'netease' }) {
 
   async function start() {
     if (token || pending || restoring) return;
+    if (restoreFailed) return restore();
     const attempt = { failures: 0 };
     pending = attempt;
     retry.hidden = true;
@@ -143,7 +166,36 @@ export function accountPanel({ onLogin, onLogout, scope = 'netease' }) {
     dialog.close();
   }
 
-  action.addEventListener('click', () => token ? signOut() : start());
+  async function restore() {
+    if (restoring || token || pending) return;
+    let saved;
+    try { saved = localStorage.getItem(storageKey); } catch { /* Try session storage below. */ }
+    if (!saved) {
+      try { saved = sessionStorage.getItem(storageKey); } catch { return; }
+    }
+    if (!saved) return;
+    restoring = true;
+    action.disabled = true;
+    try {
+      const { profile } = await request(apiPrefix + 'account', null, { token: saved });
+      restoreFailed = false;
+      signedIn(profile, saved);
+    } catch (error) {
+      restoreFailed = error.status !== 401;
+      if (restoreFailed) {
+        action.textContent = '重试恢复登录';
+        action.title = error.message;
+      } else {
+        remember(undefined, saved);
+        showProfile(null);
+      }
+    } finally {
+      restoring = false;
+      action.disabled = false;
+    }
+  }
+
+  action.addEventListener('click', () => token ? signOut() : restoreFailed ? restore() : start());
   retry.addEventListener('click', start);
   close.addEventListener('click', cancel);
   dialog.addEventListener('cancel', event => {
@@ -154,22 +206,7 @@ export function accountPanel({ onLogin, onLogout, scope = 'netease' }) {
   return {
     get token() { return token; },
     start,
-    expire() { if (token) signOut(true); },
-    async restore() {
-      let saved;
-      try { saved = sessionStorage.getItem(storageKey); } catch { return; }
-      if (!saved) return;
-      restoring = true;
-      action.disabled = true;
-      try {
-        const { profile } = await request(apiPrefix + 'account', null, { token: saved });
-        signedIn(profile, saved);
-      } catch (error) {
-        if (error.status === 401) remember();
-      } finally {
-        restoring = false;
-        action.disabled = false;
-      }
-    },
+    expire() { if (token) signedOut(true); },
+    restore,
   };
 }
