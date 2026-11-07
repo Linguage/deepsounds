@@ -4,9 +4,9 @@
 
 ## 安装
 
-适用于 DSH 0.2.x 的 Desktop 或 Web 界面。从 [GitHub Releases](https://github.com/Linguage/deepsounds/releases/latest) 下载 `deepsounds-*.tgz`，在 DSH 的「插件 → 添加插件」填入下载文件的绝对路径并启用。安装后从侧栏打开「deepsounds」。
+适用于 DSH 0.2.x 的 Desktop 或 Web 界面。从 [GitHub Releases](https://github.com/Linguage/deepsounds/releases/latest) 下载 `deepsounds-dsh-*.tgz`，在 DSH 的「插件 → 添加插件」填入下载文件的绝对路径并启用。安装后从侧栏打开「deepsounds」。
 
-从 0.9.x 升级时，先停用旧插件，再安装 deepsounds。新版使用独立的插件标识。在同一个 DSH 环境中，本机收藏与队列会保留，平台账号需要重新扫码登录。
+从 0.10.0 或更早版本升级时，先停用旧插件，再安装 `deepsounds-dsh`。在同一个 DSH 环境中，本机收藏与队列会保留。从 0.9.x 升级或登录过期时，平台账号需要重新扫码登录。
 
 在支持右侧标签的 DSH 版本中，打开一段对话，展开右侧栏，在「开始」页选择「deepsounds」。已有标签时可用右侧栏的「＋」打开「开始」。右侧与全尺寸界面共用播放器，切换视图或收起右侧栏时，音频可继续播放。
 
