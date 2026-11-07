@@ -93,6 +93,7 @@
         <button class="search-submit" type="submit" aria-label="搜索"><svg class="icon" aria-hidden="true"><use href="#i-back"/></svg></button>
       </form>
       <button id="update-open" class="icon-button" type="button" title="检查插件更新" aria-label="检查插件更新"><svg class="icon" aria-hidden="true"><use href="#i-retry"/></svg></button>
+      <button id="platform-settings-open" class="icon-button" type="button" title="平台设置" aria-label="平台设置" aria-haspopup="dialog"><svg class="icon" aria-hidden="true"><use href="#i-settings"/></svg></button>
     </header>
 
     <div class="workspace">
@@ -227,6 +228,21 @@
 
   <dialog id="navigation-drawer" class="navigation-drawer" aria-label="内容导航">
     <button id="navigation-close" class="icon-button" type="button" aria-label="关闭内容导航" autofocus><svg class="icon" aria-hidden="true"><use href="#i-close"/></svg></button>
+  </dialog>
+
+  <dialog id="platform-settings" class="login-dialog" aria-labelledby="platform-settings-title">
+    <h2 id="platform-settings-title">平台设置</h2>
+    <p class="update-versions">选择要在 deepsounds 中使用的平台。</p>
+    <div class="platform-options">
+      <label><span>网易云音乐</span><input type="checkbox" value="netease"></label>
+      <label><span>小宇宙</span><input type="checkbox" value="xiaoyuzhou"></label>
+      <label><span>哔哩哔哩</span><input type="checkbox" value="bilibili"></label>
+    </div>
+    <p id="platform-settings-status" role="status"></p>
+    <div class="dialog-actions">
+      <button id="platform-settings-save" class="primary" type="button">保存</button>
+      <button id="platform-settings-cancel" class="more" type="button">取消</button>
+    </div>
   </dialog>
 
   <dialog id="update-dialog" class="login-dialog" aria-labelledby="update-title">

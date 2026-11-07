@@ -2,6 +2,8 @@
 
 在 DeepSeek Harness 侧栏打开「deepsounds」，可切换网易云音乐、小宇宙和 B 站。切换来源或 DSH 面板时，当前音频可继续播放。
 
+搜索框右侧的「平台设置」可分别开启或关闭三个平台，默认全部开启。关闭平台后会隐藏其入口并停止相关播放和提醒，收藏和待播队列可在重新启用后继续使用。
+
 ## 安装
 
 适用于 DSH 0.2.x 的 Desktop 或 Web 界面。从 [GitHub Releases](https://github.com/Linguage/deepsounds/releases/latest) 下载 `deepsounds-dsh-*.tgz`，在 DSH 的「插件 → 添加插件」填入下载文件的绝对路径并启用。安装后从侧栏打开「deepsounds」。

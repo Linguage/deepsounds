@@ -123,6 +123,7 @@ try {
     return node.currentTime;
   });
   await page.getByRole('button', { name: '插件', exact: true }).click();
+  await page.getByText('deepsounds-dsh', { exact: true }).first().waitFor();
   await page.locator('iframe[title="deepsounds"]').waitFor({ state: 'hidden' });
   const parkedTime = await audio.evaluate((node, start) => new Promise((resolve, reject) => {
     const timer = setInterval(() => {
@@ -496,6 +497,28 @@ try {
   await standalone.locator('#empty-login').waitFor();
   assert.ok((await standalone.locator('#collection').boundingBox()).height > 500, 'the Bilibili library fills the mobile workspace');
   assert.equal(await standalone.evaluate(() => document.documentElement.scrollWidth), 320);
+  const platforms = standalone.getByRole('dialog', { name: '平台设置' });
+  const openPlatforms = standalone.getByRole('button', { name: '平台设置' });
+  const savePlatforms = platforms.getByRole('button', { name: '保存' });
+  await openPlatforms.click();
+  assert.equal(await platforms.getByRole('checkbox', { checked: true }).count(), 3);
+  await platforms.getByRole('checkbox', { name: '哔哩哔哩' }).uncheck();
+  await savePlatforms.click();
+  await standalone.locator('html[data-provider="netease"]').waitFor();
+  await mobileMenu.click();
+  assert.equal(await mobileDrawer.getByRole('button', { name: '哔哩哔哩', exact: true }).count(), 0);
+  await mobileDrawer.getByRole('button', { name: '关闭内容导航' }).click();
+  await openPlatforms.click();
+  for (const name of ['网易云音乐', '小宇宙']) await platforms.getByRole('checkbox', { name }).uncheck();
+  await savePlatforms.click();
+  await standalone.reload();
+  await standalone.getByRole('heading', { name: '尚未启用平台' }).waitFor();
+  assert.ok(await standalone.getByRole('searchbox').isDisabled());
+  await openPlatforms.click();
+  await platforms.getByRole('checkbox', { name: '小宇宙' }).check();
+  await savePlatforms.click();
+  await standalone.locator('html[data-provider="xiaoyuzhou"]').waitFor();
+  assert.ok(await standalone.getByRole('searchbox').isEnabled());
   console.log('DSH Web: live embedded Bilibili playback, three sources, audio, QR waiting, queues, and 320px layout passed.');
 } finally {
   try { await browser?.close(); } finally { host.kill(); }

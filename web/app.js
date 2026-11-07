@@ -98,11 +98,20 @@ const creatorActionStatus = get('creator-action-status');
 const sourceViews = new Map();
 const homeCollections = new Map();
 const sourcePreference = 'dsh-audio-source';
+const enabledSourcesKey = 'dsh-audio-enabled-sources';
+const platformSettings = get('platform-settings');
+const platformOptions = [...platformSettings.querySelectorAll('input')];
 const favoritesKey = 'dsh-audio-podcast-favorites';
 const trackFavoritesKey = 'dsh-audio-track-favorites';
 const pendingKey = 'dsh-audio-pending-queue';
+const sourceIds = sources.map(button => button.dataset.source);
+let enabledSources = new Set(sourceIds);
+try {
+  const saved = JSON.parse(readLocal(enabledSourcesKey));
+  if (Array.isArray(saved)) enabledSources = new Set(sourceIds.filter(id => saved.includes(id)));
+} catch { /* Use defaults if stored preferences cannot be read. */ }
 let source = readLocal(sourcePreference);
-if (!sources.some(button => button.dataset.source === source)) source = 'netease';
+if (!enabledSources.has(source)) source = enabledSources.values().next().value ?? null;
 let kind = source === 'xiaoyuzhou' ? 'playlist' : 'song';
 let collection;
 let previousCollection;
@@ -156,7 +165,7 @@ const biliAccount = accountPanel({
   scope: 'bilibili',
   onLogin(profile) {
     biliProfileId = profile.id;
-    videoUpdates.connect(profile.id);
+    if (enabledSources.has('bilibili')) videoUpdates.connect(profile.id);
     if (source === 'bilibili') {
       if (biliPrivateViews.has(collection?.type)) openBiliList(collection.type);
       else if (!collection || collection.type === 'library') openLibrary();
@@ -180,6 +189,43 @@ const biliAccount = accountPanel({
   },
 });
 const accountFor = provider => provider === 'xiaoyuzhou' ? podcastAccount : provider === 'bilibili' ? biliAccount : account;
+
+get('platform-settings-open').addEventListener('click', () => {
+  for (const option of platformOptions) option.checked = enabledSources.has(option.value);
+  get('platform-settings-status').textContent = '';
+  platformSettings.showModal();
+});
+get('platform-settings-cancel').addEventListener('click', () => platformSettings.close());
+get('platform-settings-save').addEventListener('click', () => {
+  const selection = platformOptions.filter(option => option.checked).map(option => option.value);
+  if (!writeLocal(enabledSourcesKey, JSON.stringify(selection))) {
+    get('platform-settings-status').textContent = '本机无法保存平台设置。';
+    return;
+  }
+  const newlyEnabled = selection.filter(id => !enabledSources.has(id));
+  const stopBilibili = enabledSources.has('bilibili') && !selection.includes('bilibili');
+  enabledSources = new Set(selection);
+  if (stopBilibili) {
+    closeVideo();
+    videoUpdates.disconnect();
+    clearTimeout(updateToastTimer);
+    updateToast.hidden = true;
+    desktopNotice?.close();
+  }
+  if (queueIndex >= 0 && !enabledSources.has(queue[queueIndex]?.source)) resetAudio();
+  const preferred = enabledSources.has(source) ? source : selection[0] ?? null;
+  if (preferred === source) {
+    syncSource();
+    refreshQueueView();
+  } else switchSource(preferred);
+  renderQueueControls();
+  syncPlayer();
+  for (const id of newlyEnabled) {
+    if (id === 'bilibili' && biliProfileId) videoUpdates.connect(biliProfileId);
+    if (!accountFor(id).token) void accountFor(id).restore();
+  }
+  platformSettings.close();
+});
 
 function readLocal(key) {
   try { return localStorage.getItem(key); } catch { return null; }
@@ -326,7 +372,16 @@ function syncSource() {
   const bili = source === 'bilibili';
   if (podcast && !podcastAccount.token) kind = 'playlist';
   document.documentElement.dataset.provider = source;
-  for (const button of sources) button.setAttribute('aria-pressed', String(button.dataset.source === source));
+  const sourceSwitch = contentRail.querySelector('.source-switch');
+  sourceSwitch.hidden = !enabledSources.size;
+  sourceSwitch.style.setProperty('--source-count', enabledSources.size);
+  contentRail.querySelector('.navigation').hidden = !source;
+  query.disabled = !source;
+  form.querySelector('button').disabled = !source;
+  for (const button of sources) {
+    button.hidden = !enabledSources.has(button.dataset.source);
+    button.setAttribute('aria-pressed', String(button.dataset.source === source));
+  }
   for (const button of filters) button.hidden = podcast && !podcastAccount.token && button.dataset.kind === 'song';
   get('song-nav-label').textContent = bili ? '视频' : podcast ? '单集' : '歌曲';
   get('collection-nav-label').textContent = bili ? 'UP 主' : podcast ? '节目' : '歌单';
@@ -348,26 +403,28 @@ function syncSource() {
     clearLyrics(podcast ? '播放单集后，这里会显示简介。' : '播放歌曲后，这里会显示歌词。');
   }
   selectKind(kind);
+  if (!source) query.placeholder = '请先启用平台';
 }
 
 function switchSource(value, restore = true) {
-  if (source === value) return;
-  sourceViews.set(source, {
+  if (source === value || (value && !enabledSources.has(value))) return;
+  if (source) sourceViews.set(source, {
     collection, previousCollection, kind, query: query.value, scroll: collectionView.scrollTop,
   });
   const saved = sourceViews.get(value);
   source = value;
-  writeLocal(sourcePreference, source);
+  if (source) writeLocal(sourcePreference, source);
   kind = saved?.kind ?? (source === 'xiaoyuzhou' ? 'playlist' : 'song');
   query.value = saved?.query ?? '';
   syncSource();
+  if (!source) return resetCollection();
   if (!restore) return;
   if (saved?.collection) {
     previousCollection = saved.previousCollection;
     const model = saved.collection;
     if (model.type === 'favorites') model.items = favorites();
     if (model.type === 'track-favorites') model.items = savedTracks(value);
-    if (model.type === 'queue') model.items = queue;
+    if (model.type === 'queue') model.items = visibleQueue();
     if (model.type === 'library' && model.locked && accountFor(source).token) return openLibrary();
     if (model.type === 'cloud-queue' && model.locked && podcastAccount.token) return openCloudQueue();
     if (biliPrivateViews.has(model.type) && model.locked && biliAccount.token) return openBiliList(model.type);
@@ -400,8 +457,13 @@ function syncFilters(area = kind) {
 }
 
 function startSearch(text) {
+  if (!source) return;
   const link = parseShare(text);
   if (link) {
+    if (!enabledSources.has(link.source)) {
+      resultStatus.textContent = '请先在「平台设置」中启用此链接所属的平台。';
+      return;
+    }
     switchSource(link.source, false);
     return openDetail(link.id ?? link.code, null, link.type === 'podcast' ? 'playlist' : link.type);
   }
@@ -435,6 +497,7 @@ function openBiliList(type) {
 }
 
 function openBiliUpdates() {
+  if (!enabledSources.has('bilibili')) return;
   switchSource('bilibili', false);
   updateToast.hidden = true;
   openBiliList('updates');
@@ -506,10 +569,11 @@ function toggleQueue() {
   }
   queueReturn = { model: collection, prior: previousCollection, scroll: collectionView.scrollTop };
   previousCollection = null;
-  show({ type: 'queue', items: queue, next: null }, true);
+  show({ type: 'queue', items: visibleQueue(), next: null }, true);
 }
 
 function openHome() {
+  if (!source) return resetCollection();
   if (source === 'bilibili') return openLibrary();
   previousCollection = null;
   if (!homeCollections.has(source)) homeCollections.set(source, { type: 'home', items: [], next: 0 });
@@ -557,12 +621,21 @@ function resetCollection(message) {
   resultStatus.textContent = message ?? '';
   setLyricsVisible(false);
   syncFilters();
+  if (!source) {
+    get('view-label').textContent = '';
+    get('results-title').textContent = '尚未启用平台';
+    resultMeta.textContent = '点击右上角的「平台设置」启用平台。';
+  }
 }
 
 function resetAfterLogout(expired) {
   sourceViews.delete('netease');
   if (source === 'netease') resetCollection(expired ? '登录已失效，请重新扫码。' : '已退出网易云音乐。');
   if (queue[queueIndex]?.source !== 'netease' || expired) return;
+  resetAudio();
+}
+
+function resetAudio() {
   listening?.abort();
   listening = queueSource = null;
   queue = queue.slice(queueIndex + 1).filter(item => item.manual);
@@ -1330,8 +1403,12 @@ function toggleTrackFavorite(item, provider, button, index) {
 
 function refreshQueueView() {
   if (collection?.type !== 'queue') return;
-  collection.items = queue;
+  collection.items = visibleQueue();
   renderCollection();
+}
+
+function visibleQueue() {
+  return queue.filter(item => enabledSources.has(item.source));
 }
 
 function enqueue(item, provider) {
@@ -1416,7 +1493,7 @@ function syncPlayer() {
   const hasMedia = !media.error && (media.hasAttribute('src') || Boolean(media.srcObject));
   const canSeek = hasMedia && Number.isFinite(media.duration) && media.duration > 0;
   const playing = hasMedia && !media.paused && !media.ended;
-  playToggle.disabled = !hasMedia && (Boolean(activeVideo) || queueIndex >= 0 || !queue.length);
+  playToggle.disabled = !hasMedia && (Boolean(activeVideo) || queueIndex >= 0 || adjacentTrack(1) < 0);
   const label = playing ? '暂停' : '播放';
   playToggle.setAttribute('aria-label', label);
   playToggle.title = label;
@@ -1464,8 +1541,15 @@ function setTextMode(podcast) {
 }
 
 function renderQueueControls() {
-  previous.disabled = queueIndex <= 0;
-  next.disabled = queueIndex >= queue.length - 1;
+  previous.disabled = adjacentTrack(-1) < 0;
+  next.disabled = adjacentTrack(1) < 0;
+}
+
+function adjacentTrack(step) {
+  for (let index = queueIndex + step; index >= 0 && index < queue.length; index += step) {
+    if (enabledSources.has(queue[index].source)) return index;
+  }
+  return -1;
 }
 
 function clearLyrics(text) {
@@ -1511,13 +1595,21 @@ function showLyrics(payload) {
 }
 
 async function playAt(index, automatic = false) {
-  if (index < 0 || index >= queue.length) return;
+  const item = queue[index];
+  if (!item || !enabledSources.has(item.source)) return;
+  // Keep disabled manual entries pending when advancing to another platform.
+  const skipped = queue.slice(queueIndex + 1, index);
+  const held = skipped.filter(entry => entry.manual && !enabledSources.has(entry.source));
+  if (held.length) {
+    queue.splice(queueIndex + 1, skipped.length, ...skipped.filter(entry => !held.includes(entry)));
+    queue.push(...held);
+    index -= held.length;
+  }
   closeVideo();
   listening?.abort();
   const request = new AbortController();
   listening = request;
   queueIndex = index;
-  const item = queue[index];
   const podcast = item.source === 'xiaoyuzhou';
   const itemKey = trackKey(item);
   const pending = new Set(queue.slice(queueIndex + 1).filter(entry => entry.manual).map(entry => trackKey(entry)));
@@ -1618,7 +1710,7 @@ queueToggle.addEventListener('click', toggleQueue);
 collectionSync.addEventListener('click', () => collection?.type === 'updates' ? openBiliUpdates() : openCloudQueue());
 get('empty-login').addEventListener('click', () => accountFor(source).start());
 get('collection-play').addEventListener('click', () => {
-  if (collection?.type === 'queue') return playAt(queueIndex < 0 ? 0 : queueIndex);
+  if (collection?.type === 'queue') return playAt(queueIndex < 0 ? adjacentTrack(1) : queueIndex);
   if (collection && ['playlist', 'episode', 'cloud-queue', 'track-favorites'].includes(collection.type)) playFrom(collection);
 });
 get('collection-save').addEventListener('click', () => {
@@ -1643,8 +1735,8 @@ back.addEventListener('click', () => {
     if (model.type === 'search') query.focus();
   }
 });
-previous.addEventListener('click', () => playAt(queueIndex - 1));
-next.addEventListener('click', () => playAt(queueIndex + 1));
+previous.addEventListener('click', () => playAt(adjacentTrack(-1)));
+next.addEventListener('click', () => playAt(adjacentTrack(1)));
 retry.addEventListener('click', () => playAt(queueIndex));
 playToggle.addEventListener('click', () => {
   if (activeVideo) {
@@ -1656,7 +1748,7 @@ playToggle.addEventListener('click', () => {
     });
     return;
   }
-  if (queueIndex < 0 && queue.length) return playAt(0);
+  if (queueIndex < 0 && adjacentTrack(1) >= 0) return playAt(adjacentTrack(1));
   if (!audio.paused && !audio.ended) return audio.pause();
   void audio.play().catch(() => {
     if (videoPanel.hidden && audio.hasAttribute('src')) setAudioStatus('音频暂时无法播放。', true);
@@ -1745,7 +1837,7 @@ document.addEventListener('keydown', event => {
 });
 audio.addEventListener('ended', () => {
   syncPlayer();
-  if (videoPanel.hidden && queueIndex + 1 < queue.length) playAt(queueIndex + 1, true);
+  if (videoPanel.hidden) playAt(adjacentTrack(1), true);
 });
 audio.addEventListener('playing', () => setAudioStatus(''));
 audio.addEventListener('error', () => {
@@ -1761,9 +1853,7 @@ renderQueueControls();
 syncPlayer();
 syncSource();
 openHome();
-void account.restore();
-void podcastAccount.restore();
-void biliAccount.restore();
+for (const id of enabledSources) void accountFor(id).restore();
 
 try {
   const host = window.parent === window ? null : window.parent.document.body;
