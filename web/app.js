@@ -4,6 +4,35 @@ import { bilibiliPlayerUrl, parseShare } from './links.js';
 import { monitorBilibiliUpdates } from './bilibili-updates.js';
 
 const get = id => document.getElementById(id);
+const navigationDrawer = get('navigation-drawer');
+const navigationOpen = get('navigation-open');
+const contentRail = get('content-rail');
+const compactNavigation = matchMedia('(max-width: 760px)');
+
+function restoreNavigation() {
+  if (contentRail.parentElement === navigationDrawer) document.querySelector('main').before(contentRail);
+  navigationOpen.setAttribute('aria-expanded', 'false');
+}
+
+function closeNavigation() {
+  if (navigationDrawer.open) navigationDrawer.close();
+  restoreNavigation();
+}
+
+navigationOpen.addEventListener('click', () => {
+  if (!compactNavigation.matches || navigationDrawer.open) return;
+  navigationDrawer.append(contentRail);
+  navigationOpen.setAttribute('aria-expanded', 'true');
+  navigationDrawer.showModal();
+});
+get('navigation-close').addEventListener('click', closeNavigation);
+navigationDrawer.addEventListener('close', () => { if (!navigationDrawer.open) restoreNavigation(); });
+navigationDrawer.addEventListener('click', event => { if (event.target === navigationDrawer) closeNavigation(); });
+contentRail.addEventListener('click', event => {
+  if (navigationDrawer.open && event.target.closest('button')) closeNavigation();
+}, { capture: true });
+compactNavigation.addEventListener('change', event => { if (!event.matches) closeNavigation(); });
+
 const form = get('search-form');
 const query = get('query');
 const filters = [...document.querySelectorAll('[data-kind]')];
@@ -218,6 +247,69 @@ async function api(path, params, signal, authenticated = false, method = 'GET') 
     throw error;
   }
 }
+
+const updateDialog = get('update-dialog');
+const updateVersions = get('update-versions');
+const updateStatus = get('update-status');
+const updateInstall = get('update-install');
+const updateDownload = get('update-download');
+const updateCheck = get('update-check');
+const updateRelease = get('update-release');
+let updateResult;
+let updateBusy = false;
+
+async function checkPluginUpdate() {
+  if (updateBusy) return;
+  updateBusy = true;
+  updateResult = null;
+  updateVersions.hidden = updateInstall.hidden = updateDownload.hidden = updateCheck.hidden = true;
+  updateRelease.href = 'https://github.com/Linguage/deepsounds/releases/latest';
+  updateStatus.textContent = '正在检查更新…';
+  try {
+    const release = await request('update');
+    updateResult = release;
+    updateVersions.textContent = '当前 v' + release.current + ' · 最新 v' + release.version;
+    updateVersions.hidden = false;
+    updateRelease.href = release.releaseUrl;
+    if (release.available) {
+      updateStatus.textContent = release.downloadUrl ? (release.canInstall ?
+        '安装时可能会短暂中断播放，完成后可能需要重启 DSH。' : '下载安装包后，在 DSH 的「插件 → 添加插件」中安装。') :
+        '发现新版，安装包暂未发布。';
+      updateInstall.hidden = !(release.canInstall && release.downloadUrl);
+      updateDownload.hidden = !release.downloadUrl;
+      if (release.downloadUrl) updateDownload.href = release.downloadUrl;
+    } else {
+      updateStatus.textContent = release.current !== release.installed ?
+        '已安装 v' + release.installed + '，请重启 DSH 生效。' : '当前已是最新版本。';
+    }
+  } catch (error) {
+    updateStatus.textContent = error.status ? error.message : '暂时无法检查更新，请稍后重试。';
+  } finally {
+    updateBusy = false;
+    updateCheck.hidden = false;
+  }
+}
+
+get('update-open').addEventListener('click', () => {
+  updateDialog.showModal();
+  checkPluginUpdate();
+});
+get('update-close').addEventListener('click', () => updateDialog.close());
+updateCheck.addEventListener('click', checkPluginUpdate);
+updateInstall.addEventListener('click', async () => {
+  if (updateBusy || !updateResult?.available) return;
+  updateBusy = updateInstall.disabled = updateCheck.disabled = true;
+  updateStatus.textContent = '正在通过 DSH 安装更新…';
+  try {
+    const { version, restart } = await request('update/install', { version: updateResult.version }, { method: 'POST' });
+    updateStatus.textContent = '已安装 v' + version + (restart ? '，请重启 DSH 生效。' : '。');
+    updateInstall.hidden = updateDownload.hidden = true;
+  } catch (error) {
+    updateStatus.textContent = error.status ? error.message : '未收到安装结果，请到 DSH 插件管理确认版本。';
+  } finally {
+    updateBusy = updateInstall.disabled = updateCheck.disabled = false;
+  }
+});
 
 function selectKind(value) {
   kind = value;

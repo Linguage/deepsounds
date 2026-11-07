@@ -153,6 +153,14 @@ try {
   await right.getByRole('button', { name: /^deepsounds/ }).click();
   await right.locator(playerFrame).waitFor();
   assert.ok(await page.getByRole('textbox', { name: /描述你想要构建的内容/ }).isVisible());
+  const openNavigation = frame.getByRole('button', { name: '打开内容导航' });
+  const sideDrawer = frame.getByRole('dialog', { name: '内容导航' });
+  assert.equal(await frame.locator('#content-rail').isVisible(), false);
+  assert.equal(await frame.locator('main').evaluate(node => node.clientWidth === innerWidth), true);
+  await openNavigation.click();
+  await sideDrawer.getByRole('heading', { name: 'deepsounds' }).waitFor();
+  await page.keyboard.press('Escape');
+  await sideDrawer.waitFor({ state: 'hidden' });
   assert.equal(await page.locator(playerFrame).count(), 1);
   assert.equal(await input.inputValue(), '海阔天空');
   assert.equal(await audio.getAttribute('data-continuity-check'), 'original');
@@ -458,8 +466,11 @@ try {
 
   const standalone = await browser.newPage({ viewport: { width: 320, height: 760 }, colorScheme: 'dark' });
   await standalone.goto(new URL('/deepsounds/', address).href);
-  await standalone.getByRole('heading', { name: 'deepsounds' }).waitFor();
-  await standalone.getByRole('button', { name: '小宇宙', exact: true }).click();
+  const mobileMenu = standalone.getByRole('button', { name: '打开内容导航' });
+  const mobileDrawer = standalone.getByRole('dialog', { name: '内容导航' });
+  await mobileMenu.click();
+  await mobileDrawer.getByRole('button', { name: '小宇宙', exact: true }).click();
+  await mobileDrawer.waitFor({ state: 'hidden' });
   await standalone.getByRole('searchbox').fill('https://www.xiaoyuzhoufm.com/podcast/5e7cc741418a84a046b0c2bd');
   await standalone.getByRole('searchbox').press('Enter');
   await standalone.locator('.result-row').first().waitFor();
@@ -476,10 +487,12 @@ try {
   await standalone.locator('.result-row').first().waitFor();
   assert.equal(await standalone.evaluate(() => document.documentElement.scrollWidth), 320);
   assert.equal(await standalone.evaluate(() => getComputedStyle(document.documentElement).colorScheme), 'dark');
-  const cloudNav = await standalone.locator('#podcast-playback-list').boundingBox();
-  assert.ok(cloudNav && cloudNav.x + cloudNav.width < 320, 'the cloud playlist shortcut is visible at 320px');
   await standalone.screenshot({ path: 'artifacts/audio-podcast-mobile.png' });
-  await standalone.getByRole('button', { name: '哔哩哔哩', exact: true }).click();
+  await mobileMenu.click();
+  const cloudNav = await mobileDrawer.locator('#podcast-playback-list').boundingBox();
+  assert.ok(cloudNav && cloudNav.x + cloudNav.width < 320, 'the cloud playlist shortcut is visible in the drawer at 320px');
+  await mobileDrawer.getByRole('button', { name: '哔哩哔哩', exact: true }).click();
+  await mobileDrawer.waitFor({ state: 'hidden' });
   await standalone.locator('#empty-login').waitFor();
   assert.ok((await standalone.locator('#collection').boundingBox()).height > 500, 'the Bilibili library fills the mobile workspace');
   assert.equal(await standalone.evaluate(() => document.documentElement.scrollWidth), 320);

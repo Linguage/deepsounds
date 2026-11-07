@@ -10,6 +10,7 @@
 </head>
 <body>
   <svg class="icon-definitions" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+    <symbol id="i-menu" viewBox="0 0 24 24"><path d="M4 6h16M4 12h16M4 18h16"/></symbol>
     <symbol id="i-search" viewBox="0 0 24 24"><circle cx="10.8" cy="10.8" r="6.3"/><path d="m16 16 4 4"/></symbol>
     <symbol id="i-home" viewBox="0 0 24 24"><path d="m3 11 9-7 9 7M5 10v9a1 1 0 0 0 1 1h4v-6h4v6h4a1 1 0 0 0 1-1v-9"/></symbol>
     <symbol id="i-note" viewBox="0 0 24 24"><path d="M9 17V5l11-2v12M9 8l11-2"/><ellipse cx="6" cy="17.6" rx="3" ry="2.2"/><ellipse cx="17" cy="15.6" rx="3" ry="2.2"/></symbol>
@@ -36,7 +37,7 @@
     <symbol id="i-retry" viewBox="0 0 24 24"><path d="M20 11a8 8 0 1 0-2 6m2-11v5h-5"/></symbol>
   </svg>
 
-  <aside class="rail" aria-label="内容导航">
+  <aside id="content-rail" class="rail" aria-label="内容导航">
     <div class="brand"><img src="./icon.svg" width="29" height="29" alt=""><h1>deepsounds</h1></div>
     <div class="source-switch" role="group" aria-label="内容来源">
       <button type="button" data-source="netease" aria-label="网易云音乐" aria-pressed="true">网易云</button>
@@ -83,6 +84,7 @@
 
   <main class="main">
     <header class="toolbar">
+      <button id="navigation-open" class="icon-button" type="button" title="打开内容导航" aria-label="打开内容导航" aria-haspopup="dialog" aria-controls="navigation-drawer" aria-expanded="false"><svg class="icon" aria-hidden="true"><use href="#i-menu"/></svg></button>
       <span id="view-label" class="view-label">主页</span>
       <form id="search-form" role="search">
         <label class="sr-only" for="query">搜索关键词或粘贴分享链接</label>
@@ -90,6 +92,7 @@
         <input id="query" type="search" autocomplete="off" required placeholder="搜索歌曲或歌手">
         <button class="search-submit" type="submit" aria-label="搜索"><svg class="icon" aria-hidden="true"><use href="#i-back"/></svg></button>
       </form>
+      <button id="update-open" class="icon-button" type="button" title="检查插件更新" aria-label="检查插件更新"><svg class="icon" aria-hidden="true"><use href="#i-retry"/></svg></button>
     </header>
 
     <div class="workspace">
@@ -221,6 +224,23 @@
       </div>
     </footer>
   </main>
+
+  <dialog id="navigation-drawer" class="navigation-drawer" aria-label="内容导航">
+    <button id="navigation-close" class="icon-button" type="button" aria-label="关闭内容导航" autofocus><svg class="icon" aria-hidden="true"><use href="#i-close"/></svg></button>
+  </dialog>
+
+  <dialog id="update-dialog" class="login-dialog" aria-labelledby="update-title">
+    <h2 id="update-title">插件更新</h2>
+    <p id="update-versions" class="update-versions" hidden></p>
+    <p id="update-status" class="login-status" role="status"></p>
+    <div class="dialog-actions">
+      <button id="update-install" class="primary" type="button" hidden>安装更新</button>
+      <a id="update-download" class="more update-download" target="_blank" rel="noopener noreferrer" hidden>下载安装包</a>
+      <button id="update-check" class="more" type="button" hidden>重新检查</button>
+      <button id="update-close" class="more" type="button" autofocus>关闭</button>
+    </div>
+    <a id="update-release" class="detail-link" href="https://github.com/Linguage/deepsounds/releases/latest" target="_blank" rel="noopener noreferrer">查看 GitHub 发行版 ↗</a>
+  </dialog>
 
   <dialog id="login-dialog" class="login-dialog" aria-labelledby="login-title">
     <h2 id="login-title">扫码登录网易云音乐</h2>

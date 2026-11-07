@@ -87,6 +87,16 @@ button:disabled { cursor: default; opacity: .38; }
   display: flex; flex-direction: column; min-width: 0; min-height: 0;
   background: var(--rail); border-inline-end: 1px solid var(--line);
 }
+#navigation-open { display: none; flex: none; }
+.navigation-drawer {
+  position: fixed; inset: 0 auto 0 0; margin: 0; width: min(84vw, 280px); max-width: none;
+  height: 100dvh; max-height: none; padding: 0; border: 0; border-inline-end: 1px solid var(--line);
+  background: var(--rail); color: var(--text);
+}
+.navigation-drawer::backdrop { background: #08090b80; }
+.navigation-drawer .rail { height: 100%; border: 0; }
+.navigation-drawer .brand { padding-inline-end: 54px; }
+#navigation-close { position: absolute; inset: 17px 12px auto auto; }
 .brand { display: flex; align-items: center; gap: 9px; padding: 23px 16px 20px; }
 .brand img { flex: none; }
 .brand h1 { font-size: 16px; font-weight: 710; white-space: nowrap; }
@@ -406,6 +416,10 @@ input[type="range"]:disabled { opacity: .35; cursor: default; }
 .login-qr { display: block; max-width: 100%; height: auto; margin: 15px auto 0; border-radius: 8px; }
 .login-status { color: var(--muted); line-height: 1.5; margin-top: 11px; font-size: 13px; }
 .dialog-actions { display: flex; justify-content: center; flex-wrap: wrap; gap: 8px; margin-top: 15px; }
+#update-open { flex: none; }
+.update-versions { margin-top: 10px; font-size: 12px; color: var(--muted); }
+.update-download { text-decoration: none; }
+#update-release { margin: 12px 0 0; }
 .video-save-folders { display: grid; gap: 4px; max-height: min(50dvh, 300px); overflow: auto; margin-top: 10px; }
 .video-save-folders label { display: flex; align-items: center; gap: 10px; padding: 8px; text-align: left; overflow-wrap: anywhere; }
 .video-save-folders label:hover { background: var(--hover); border-radius: 6px; }
@@ -415,24 +429,12 @@ input[type="range"]:disabled { opacity: .35; cursor: default; }
   #volume { display: none; }
   .collection-cover { width: clamp(95px, 23vw, 160px); }
 }
-@media (max-width: 570px) {
+@media (max-width: 760px) {
   :root { --dock-gap: 9px; --dock-clearance: 112px; }
-  body { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto minmax(0, 1fr); }
-  .rail { display: grid; grid-template-columns: minmax(0, 1fr) auto; border-inline-end: 0; }
-  .brand { padding: 9px 11px 6px; }
-  .brand img { width: 23px; height: 23px; }
-  .brand h1 { font-size: 14px; }
-  .source-switch { grid-column: 1 / -1; margin: 1px 8px 5px; }
-  .account-controls { grid-area: 1 / 2; margin: 0; border: 0; padding: 6px 10px; }
-  .avatar { width: 25px; height: 25px; }
-  .avatar .icon { width: 14px; height: 14px; }
-  :is(#account-name, #podcast-account-name, #bilibili-account-name) { max-width: 86px; }
-  .navigation { grid-column: 1 / -1; display: flex; gap: 4px; padding: 0 7px 6px; overflow-x: auto; scrollbar-width: thin; }
-  .nav-group, .nav-group + .nav-group { display: contents; }
-  .nav-label { display: none; }
-  .nav-item { flex: 1 0 auto; width: auto; white-space: nowrap; min-height: 30px; justify-content: center; font-size: 12px; padding: 3px 6px; gap: 4px; }
-  .nav-item .icon { width: 13px; height: 13px; }
-  .toolbar { min-height: 48px; padding: 6px 11px; }
+  body { grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(0, 1fr); }
+  body > .rail { display: none; }
+  #navigation-open { display: grid; }
+  .toolbar { min-height: 48px; padding: 6px 11px; gap: 8px; }
   .view-label { display: none; }
   #search-form { width: 100%; height: 33px; }
   .collection-content { padding: 16px 11px var(--dock-clearance); }
@@ -446,6 +448,7 @@ input[type="range"]:disabled { opacity: .35; cursor: default; }
   .row-actions .icon-button { width: 28px; height: 30px; }
   .album-column, .row-album { display: none; }
   .cover-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 13px 9px; }
+  .video-grid { grid-template-columns: repeat(auto-fill, minmax(min(100%, 240px), 1fr)); }
   .player { grid-template-columns: auto minmax(0, 1fr) auto; gap: 3px 6px; padding: 6px 7px; border-radius: 17px; }
   .track { grid-area: 1 / 1 / 2 / 4; padding: 0 3px; gap: 7px; }
   .player-cover { width: 30px; height: 30px; border-radius: 5px; }
@@ -461,7 +464,4 @@ input[type="range"]:disabled { opacity: .35; cursor: default; }
   #now-title, #lyric-artist { align-self: end; }
   #lyric-artist { align-self: start; }
   .lyric-scroll:has(.lyric-line) { padding-block: 10px; }
-}
-@media (max-width: 390px) {
-  :root[data-provider="xiaoyuzhou"] .nav-item .icon { display: none; }
 }
