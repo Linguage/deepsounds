@@ -1,6 +1,6 @@
 {
   "name": "deepsounds-dsh",
-  "version": "0.10.4",
+  "version": "0.10.5",
   "private": true,
   "type": "module",
   "description": "在 DSH 收听网易云音乐和小宇宙播客，观看哔哩哔哩视频。",

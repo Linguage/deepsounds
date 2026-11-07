@@ -182,6 +182,7 @@ const biliAccount = accountPanel({
     desktopNotice?.close();
     sourceViews.delete('bilibili');
     if (queueReturn?.model?.source === 'bilibili') queueReturn = null;
+    if (!expired) closeVideo();
     if (source !== 'bilibili' || collection?.type === 'queue') return;
     if (biliPrivateViews.has(collection?.type)) openBiliList(collection.type);
     else openLibrary();
@@ -194,6 +195,7 @@ get('platform-settings-open').addEventListener('click', () => {
   for (const option of platformOptions) option.checked = enabledSources.has(option.value);
   get('platform-settings-status').textContent = '';
   platformSettings.showModal();
+  for (const id of sourceIds) void accountFor(id).restore();
 });
 get('platform-settings-cancel').addEventListener('click', () => platformSettings.close());
 get('platform-settings-save').addEventListener('click', () => {
@@ -630,6 +632,7 @@ function resetCollection(message) {
 
 function resetAfterLogout(expired) {
   sourceViews.delete('netease');
+  if (queueReturn?.model?.source === 'netease') queueReturn = null;
   if (source === 'netease') resetCollection(expired ? '登录已失效，请重新扫码。' : '已退出网易云音乐。');
   if (queue[queueIndex]?.source !== 'netease' || expired) return;
   resetAudio();

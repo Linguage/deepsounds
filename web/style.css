@@ -419,8 +419,11 @@ input[type="range"]:disabled { opacity: .35; cursor: default; }
 #update-open, #platform-settings-open { flex: none; }
 .platform-options { margin-top: 14px; display: grid; }
 .platform-options label { display: flex; justify-content: space-between; align-items: center; gap: 12px; min-height: 36px; padding: 4px 8px; cursor: pointer; }
-.platform-options label + label { border-top: 1px solid var(--line); }
+.platform-option + .platform-option { border-top: 1px solid var(--line); }
 .platform-options input { width: 16px; height: 16px; accent-color: var(--accent); }
+.platform-account { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-height: 32px; padding: 0 8px 6px; text-align: start; }
+.platform-account span { min-width: 0; overflow-wrap: anywhere; color: var(--muted); font-size: 12px; }
+.platform-account .more { flex: none; min-height: 27px; padding: 3px 9px; font-size: 12px; }
 #platform-settings-status { color: var(--muted); font-size: 12px; }
 .update-versions { margin-top: 10px; font-size: 12px; color: var(--muted); }
 .update-download { text-decoration: none; }

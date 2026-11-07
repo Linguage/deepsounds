@@ -25,6 +25,10 @@ export function accountPanel({ onLogin, onLogout, scope = 'netease' }) {
   const storageKey = prefix + STORAGE_KEY;
   const name = document.getElementById(prefix + 'account-name');
   const action = document.getElementById(prefix + 'account-action');
+  const settings = document.querySelector('[data-settings-account="' + scope + '"]');
+  const settingsName = settings.querySelector('[role="status"]');
+  const settingsAction = settings.querySelector('button');
+  const actions = [action, settingsAction];
   const original = document.getElementById('login-dialog');
   const dialog = prefix ? original.cloneNode(true) : original;
   if (prefix) {
@@ -60,11 +64,25 @@ export function accountPanel({ onLogin, onLogout, scope = 'netease' }) {
     } catch { /* Some browsers disable all storage. */ }
   }
 
-  function showProfile(profile) {
+  function setAction(label, message = '') {
+    for (const button of actions) {
+      button.textContent = label;
+      if (message) button.title = message;
+      else button.removeAttribute('title');
+    }
+    settingsAction.setAttribute('aria-label', serviceName + '：' + label);
+  }
+
+  function setBusy(busy) {
+    for (const button of actions) button.disabled = busy;
+  }
+
+  function showProfile(profile, status = '未登录') {
     name.hidden = !profile;
     name.textContent = profile?.name ?? '';
-    action.textContent = profile ? '退出登录' : '扫码登录';
-    action.removeAttribute('title');
+    settingsName.textContent = profile?.name || status;
+    settingsAction.hidden = !profile;
+    setAction(profile ? '退出登录' : '扫码登录');
   }
 
   const post = (path, id) => request(apiPrefix + 'login/' + path, null, { token: id, method: 'POST' });
@@ -92,22 +110,23 @@ export function accountPanel({ onLogin, onLogout, scope = 'netease' }) {
   function signedOut(expired) {
     remember(undefined, token);
     token = undefined;
-    showProfile(null);
+    showProfile(null, expired ? '登录已失效' : '已退出登录');
     onLogout(expired);
   }
 
   async function signOut() {
-    action.disabled = true;
     const id = token;
+    if (!id || action.disabled) return;
+    setBusy(true);
+    setAction('正在退出…');
     try {
       await post('clear', id);
       if (token === id) signedOut(false);
     } catch (error) {
       if (token !== id) return;
-      action.textContent = '重试退出登录';
-      action.title = error.message;
+      setAction('重试退出登录', error.message);
     } finally {
-      action.disabled = false;
+      setBusy(false);
     }
   }
 
@@ -175,7 +194,8 @@ export function accountPanel({ onLogin, onLogout, scope = 'netease' }) {
     }
     if (!saved) return;
     restoring = true;
-    action.disabled = true;
+    setBusy(true);
+    settingsName.textContent = '正在恢复登录…';
     try {
       const { profile } = await request(apiPrefix + 'account', null, { token: saved });
       restoreFailed = false;
@@ -183,19 +203,21 @@ export function accountPanel({ onLogin, onLogout, scope = 'netease' }) {
     } catch (error) {
       restoreFailed = error.status !== 401;
       if (restoreFailed) {
-        action.textContent = '重试恢复登录';
-        action.title = error.message;
+        settingsName.textContent = '暂时无法恢复登录';
+        settingsAction.hidden = false;
+        setAction('重试恢复登录', error.message);
       } else {
         remember(undefined, saved);
         showProfile(null);
       }
     } finally {
       restoring = false;
-      action.disabled = false;
+      setBusy(false);
     }
   }
 
   action.addEventListener('click', () => token ? signOut() : restoreFailed ? restore() : start());
+  settingsAction.addEventListener('click', () => token ? signOut() : restore());
   retry.addEventListener('click', start);
   close.addEventListener('click', cancel);
   dialog.addEventListener('cancel', event => {
