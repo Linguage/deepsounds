@@ -59,9 +59,11 @@
         <button class="nav-item" type="button" id="bilibili-updates" aria-pressed="false" hidden><svg class="icon" aria-hidden="true"><use href="#i-retry"/></svg>关注更新<span class="update-count" id="bilibili-update-count" hidden></span></button>
         <button class="nav-item" type="button" id="bilibili-following" aria-pressed="false" hidden><svg class="icon" aria-hidden="true"><use href="#i-user"/></svg>关注的 UP 主</button>
         <button class="nav-item" type="button" id="my-playlists" aria-pressed="false"><svg class="icon" aria-hidden="true"><use href="#i-library"/></svg><span id="library-nav-label">我的歌单</span></button>
+        <button class="nav-item" type="button" id="podcast-updates" aria-pressed="false" hidden><svg class="icon" aria-hidden="true"><use href="#i-retry"/></svg>订阅更新</button>
+        <button class="nav-item" type="button" id="podcast-cloud-favorites" aria-pressed="false" hidden><svg class="icon" aria-hidden="true"><use href="#i-heart"/></svg>我的收藏</button>
         <button class="nav-item" type="button" id="podcast-playback-list" aria-pressed="false" hidden><svg class="icon" aria-hidden="true"><use href="#i-list"/></svg>播放列表</button>
         <button class="nav-item" type="button" id="bilibili-watch-later" aria-pressed="false" hidden><svg class="icon" aria-hidden="true"><use href="#i-list"/></svg>稍后再看</button>
-        <button class="nav-item" type="button" id="podcast-favorites" aria-pressed="false" hidden><svg class="icon" aria-hidden="true"><use href="#i-heart"/></svg>收藏节目</button>
+        <button class="nav-item" type="button" id="podcast-favorites" aria-pressed="false" hidden><svg class="icon" aria-hidden="true"><use href="#i-heart"/></svg>本机收藏节目</button>
         <button class="nav-item" type="button" id="track-favorites" aria-pressed="false"><svg class="icon" aria-hidden="true"><use href="#i-heart"/></svg><span id="track-favorites-label">收藏歌曲</span></button>
       </div>
     </nav>
@@ -114,6 +116,7 @@
               <button id="bilibili-update-read" class="more" type="button" hidden>标为已读</button>
               <p id="bilibili-update-hint" hidden></p>
               <button id="collection-save" class="more" type="button" aria-pressed="false" hidden>收藏节目</button>
+              <button id="podcast-remove-local" class="more" type="button" hidden>移除本机收藏</button>
               <button id="creator-follow" class="more" type="button" aria-pressed="false" hidden>关注 UP 主</button>
               <a id="collection-official" class="detail-link" target="_blank" rel="noopener noreferrer" hidden>在小宇宙打开 ↗</a>
               <button id="empty-login" class="primary" type="button" hidden>扫码登录</button>

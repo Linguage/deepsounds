@@ -44,6 +44,8 @@ const more = get('more');
 const back = get('back');
 const myPlaylists = get('my-playlists');
 const podcastFavorites = get('podcast-favorites');
+const podcastUpdates = get('podcast-updates');
+const podcastCloudFavorites = get('podcast-cloud-favorites');
 const trackFavorites = get('track-favorites');
 const cloudQueue = get('podcast-playback-list');
 const watchLater = get('bilibili-watch-later');
@@ -133,6 +135,13 @@ let biliProfileId;
 let updateToastTimer;
 let desktopNotice;
 const biliPrivateViews = new Set(['watch-later', 'following', 'updates']);
+const podcastLists = {
+  library: { path: 'subscriptions', title: '我的订阅', hint: '查看你在小宇宙订阅的节目', empty: '小宇宙账号还没有订阅节目。' },
+  'podcast-updates': { path: 'updates', title: '订阅更新', hint: '查看你订阅的节目发布的新单集', empty: '订阅的节目暂无更新。' },
+  'podcast-cloud-favorites': { path: 'favorites', title: '我的收藏', hint: '查看你在小宇宙收藏的单集', empty: '小宇宙账号还没有收藏单集。' },
+  'cloud-queue': { path: 'playback-list', title: '小宇宙播放列表', hint: '读取手机 App 播放器里的播放列表', empty: '手机 App 的播放列表为空。' },
+};
+const podcastWrites = new Set();
 const videoUpdates = monitorBilibiliUpdates({
   load: (signal, offset) => api('bilibili/updates', offset ? { offset } : {}, signal, true),
   read: readLocal, write: writeLocal, onChange: renderUpdateState, onNew: announceUpdates,
@@ -148,17 +157,20 @@ const podcastAccount = accountPanel({
   onLogin() {
     if (source === 'xiaoyuzhou') {
       syncSource();
-      if (collection?.type === 'cloud-queue') openCloudQueue();
-      else openLibrary();
-    }
+      if (Object.hasOwn(podcastLists, collection?.type)) openPodcastList(collection.type);
+      else if (['playlist', 'episode', 'search'].includes(collection?.type)) {
+        show({ ...collection, playlist: undefined, items: [], next: 0 });
+      } else openLibrary();
+    } else refreshQueueView();
   },
   onLogout(expired) {
     sourceViews.delete('xiaoyuzhou');
     if (queueReturn?.model?.source === 'xiaoyuzhou') queueReturn = null;
+    for (const item of queue) if (item.source === 'xiaoyuzhou') delete item.favorited;
     if (source === 'xiaoyuzhou') {
       syncSource();
       resetCollection(expired ? '小宇宙登录已失效，请重新扫码。' : '已退出小宇宙。');
-    }
+    } else refreshQueueView();
   },
 });
 const biliAccount = accountPanel({
@@ -263,7 +275,8 @@ function storedTrack(item, provider) {
 }
 
 function persistQueue() {
-  writeLocal(pendingKey, JSON.stringify(queue.slice(queueIndex + 1).filter(item => item.manual)));
+  const pending = queue.slice(queueIndex + 1).filter(item => item.manual).map(item => storedTrack(item, item.source));
+  writeLocal(pendingKey, JSON.stringify(pending));
 }
 
 function el(tag, className, content) {
@@ -388,9 +401,9 @@ function syncSource() {
   get('song-nav-label').textContent = bili ? '视频' : podcast ? '单集' : '歌曲';
   get('collection-nav-label').textContent = bili ? 'UP 主' : podcast ? '节目' : '歌单';
   get('library-nav-label').textContent = bili ? '收藏夹' : podcast ? '我的订阅' : '我的歌单';
-  get('track-favorites-label').textContent = podcast ? '收藏单集' : '收藏歌曲';
+  get('track-favorites-label').textContent = podcast ? '本机收藏单集' : '收藏歌曲';
   podcastFavorites.hidden = !podcast;
-  cloudQueue.hidden = !podcast;
+  cloudQueue.hidden = podcastUpdates.hidden = podcastCloudFavorites.hidden = !podcast;
   watchLater.hidden = biliFollowing.hidden = biliUpdates.hidden = !bili;
   trackFavorites.hidden = bili;
   get('browse-nav').hidden = bili;
@@ -424,11 +437,11 @@ function switchSource(value, restore = true) {
   if (saved?.collection) {
     previousCollection = saved.previousCollection;
     const model = saved.collection;
+    if (value === 'xiaoyuzhou' && Object.hasOwn(podcastLists, model.type)) return openPodcastList(model.type);
     if (model.type === 'favorites') model.items = favorites();
     if (model.type === 'track-favorites') model.items = savedTracks(value);
     if (model.type === 'queue') model.items = visibleQueue();
     if (model.type === 'library' && model.locked && accountFor(source).token) return openLibrary();
-    if (model.type === 'cloud-queue' && model.locked && podcastAccount.token) return openCloudQueue();
     if (biliPrivateViews.has(model.type) && model.locked && biliAccount.token) return openBiliList(model.type);
     show(model, model.next === null || model.items.length > 0);
     collectionView.scrollTop = saved.scroll;
@@ -443,6 +456,8 @@ function syncFilters(area = kind) {
   for (const button of filters) button.setAttribute('aria-pressed', String(button.dataset.kind === area));
   myPlaylists.setAttribute('aria-pressed', String(area === 'library'));
   podcastFavorites.setAttribute('aria-pressed', String(area === 'favorites'));
+  podcastUpdates.setAttribute('aria-pressed', String(area === 'podcast-updates'));
+  podcastCloudFavorites.setAttribute('aria-pressed', String(area === 'podcast-cloud-favorites'));
   trackFavorites.setAttribute('aria-pressed', String(area === 'track-favorites'));
   cloudQueue.setAttribute('aria-pressed', String(area === 'cloud-queue'));
   watchLater.setAttribute('aria-pressed', String(area === 'watch-later'));
@@ -486,6 +501,7 @@ function openDetail(id, prior, type = 'playlist', playlist) {
 }
 
 function openLibrary() {
+  if (source === 'xiaoyuzhou') return openPodcastList('library');
   previousCollection = null;
   const session = accountFor(source);
   if (!session.token) return show({ type: 'library', items: [], next: null, locked: true }, true);
@@ -553,10 +569,10 @@ function openTrackFavorites() {
   show({ type: 'track-favorites', items: savedTracks(), next: null }, true);
 }
 
-function openCloudQueue() {
+function openPodcastList(type) {
   previousCollection = null;
-  if (!podcastAccount.token) return show({ type: 'cloud-queue', items: [], next: null, locked: true }, true);
-  show({ type: 'cloud-queue', items: [], next: 0 });
+  if (!podcastAccount.token) return show({ type, items: [], next: null, locked: true }, true);
+  show({ type, items: [], next: 0 });
 }
 
 function toggleQueue() {
@@ -597,7 +613,7 @@ function describeCollection({ empty = false, coverUrl = null, kicker = '', descr
   detail.textContent = description;
   get('collection-play').hidden = !play;
   get('empty-login').hidden = !login;
-  get('collection-save').hidden = get('collection-official').hidden = true;
+  get('collection-save').hidden = get('podcast-remove-local').hidden = get('collection-official').hidden = true;
   creatorFollow.hidden = creatorActionStatus.hidden = true;
   collectionSync.hidden = true;
   updateToggle.hidden = updateRead.hidden = updateHint.hidden = true;
@@ -683,7 +699,7 @@ async function loadPage() {
   listing = request;
   const initial = current.items.length === 0;
   more.disabled = true;
-  const hasRefresh = current.type === 'cloud-queue' || current.type === 'updates';
+  const hasRefresh = (current.source === 'xiaoyuzhou' && Object.hasOwn(podcastLists, current.type)) || current.type === 'updates';
   if (hasRefresh) collectionSync.disabled = true;
   resultStatus.textContent = initial ? '正在加载…' : '正在加载更多…';
   try {
@@ -703,11 +719,10 @@ async function loadPage() {
         if (listing === request) openDetail(link.id, null, link.type === 'episode' ? 'episode' : 'playlist');
         return;
       }
-      const path = { home: 'recommendations', playlist: 'show', episode: 'episode', search: 'search',
-        library: 'subscriptions', 'cloud-queue': 'playback-list' }[current.type];
+      const path = podcastLists[current.type]?.path ?? { home: 'recommendations', playlist: 'show', episode: 'episode', search: 'search' }[current.type];
       const params = current.type === 'search' ? { q: current.query, kind: current.kind, offset: current.next } :
         { id: current.id ?? '', offset: current.next };
-      payload = await api('podcast/' + path, params, request.signal, ['search', 'playlist', 'library', 'cloud-queue'].includes(current.type));
+      payload = await api('podcast/' + path, params, request.signal, current.type !== 'home');
     } else if (current.type === 'home') {
       payload = await api('recommendations', {}, request.signal);
     } else if (current.type === 'playlist') {
@@ -761,7 +776,7 @@ function renderCollection() {
   const videos = videoFolder || watchList || updates || creatorVideos || (biliSearch && model.kind === 'song');
   const savedPodcasts = model.type === 'favorites';
   const savedItems = model.type === 'track-favorites';
-  const mobileQueue = model.type === 'cloud-queue';
+  const podcastList = podcast ? podcastLists[model.type] : null;
   const localQueue = model.type === 'queue';
   const discover = model.type === 'home';
   const detail = videoFolder || creatorVideos || ['playlist', 'episode', 'short'].includes(model.type);
@@ -818,10 +833,15 @@ function renderCollection() {
       if (!episode) {
         const save = get('collection-save');
         const saved = favorites().some(item => item.id === playlist.id);
+        const online = !!podcastAccount.token;
+        const selected = online ? playlist.subscribed === true : saved;
         save.hidden = false;
-        save.textContent = saved ? '已收藏' : '收藏节目';
-        save.setAttribute('aria-pressed', String(saved));
-        if (!podcastAccount.token && playlist.count > model.items.length && model.items.length) {
+        save.disabled = podcastWrites.has('subscribe:' + playlist.id);
+        save.textContent = online ? (selected ? '已订阅' : '订阅节目') : (selected ? '已收藏到本机' : '收藏到本机');
+        actionLabel(save, selected ? (online ? '取消订阅节目' : '移除本机收藏') : save.textContent);
+        save.setAttribute('aria-pressed', String(selected));
+        get('podcast-remove-local').hidden = !(online && saved);
+        if (!online && playlist.count > model.items.length && model.items.length) {
           resultStatus.textContent = '小宇宙公开页提供最近 ' + model.items.length + ' 集。';
         }
       } else if (model.items[0]?.missing) {
@@ -829,20 +849,21 @@ function renderCollection() {
       }
     }
   } else if (savedPodcasts) {
-    title.textContent = '收藏节目';
-    resultMeta.textContent = model.items.length ? model.items.length + ' 个节目 · 仅保存在本机' : '打开节目后，点击「收藏节目」。';
+    title.textContent = '本机收藏节目';
+    resultMeta.textContent = model.items.length ? (podcastAccount.token ? '打开节目后，可将它订阅到小宇宙账号。' :
+      model.items.length + ' 个节目 · 仅保存在本机') : '未登录时，可以在节目详情收藏到本机。';
     describeCollection({ empty: !model.items.length });
   } else if (savedItems) {
-    title.textContent = podcast ? '收藏单集' : '收藏歌曲';
-    resultMeta.textContent = model.items.length ? model.items.length + (podcast ? ' 集' : ' 首') + ' · 仅保存在本机' :
-      '点击' + (podcast ? '单集' : '歌曲') + '旁的心形按钮，即可收藏到本机。';
+    title.textContent = podcast ? '本机收藏单集' : '收藏歌曲';
+    resultMeta.textContent = podcast && podcastAccount.token && model.items.length ? '点击单集旁的心形按钮，可同步到小宇宙账号。' :
+      model.items.length ? model.items.length + (podcast ? ' 集' : ' 首') + ' · 仅保存在本机' :
+        '点击' + (podcast ? '单集' : '歌曲') + '旁的心形按钮，即可收藏到本机。';
     describeCollection({ empty: !model.items.length, play: playable(model).length > 0 });
-  } else if (mobileQueue) {
-    title.textContent = '小宇宙播放列表';
-    resultMeta.textContent = model.locked ? '扫码登录后，读取手机 App 播放器里的播放列表。' :
-      model.items.length ? model.items.length + ' 集 · 按手机 App 的列表顺序显示' : '来自手机 App 播放器';
-    describeCollection({ empty: model.next === null && !model.items.length, play: playable(model).length > 0, login: model.locked });
-    get('collection-sync-label').textContent = '重新同步';
+  } else if (podcastList) {
+    title.textContent = podcastList.title;
+    resultMeta.textContent = model.locked ? '扫码登录后，' + podcastList.hint + '。' : '来自小宇宙账号';
+    describeCollection({ empty: model.next === null && !model.items.length, play: !library && playable(model).length > 0, login: model.locked });
+    get('collection-sync-label').textContent = model.type === 'podcast-updates' ? '刷新更新' : '重新同步';
     collectionSync.hidden = model.locked;
     collectionSync.disabled = !!listing;
   } else if (localQueue) {
@@ -851,10 +872,8 @@ function renderCollection() {
       '点击歌曲或单集旁的加入按钮，即可加入本机队列。';
     describeCollection({ empty: !model.items.length, play: model.items.length > 0 });
   } else if (library) {
-    title.textContent = podcast ? '我的订阅' : '我的歌单';
-    resultMeta.textContent = podcast ? (model.locked ? '扫码登录后，查看你在小宇宙订阅的节目。' :
-      model.items.length ? '已加载 ' + model.items.length + ' 个订阅' : '') :
-      model.locked ? '扫码登录后，查看你创建和收藏的歌单。' :
+    title.textContent = '我的歌单';
+    resultMeta.textContent = model.locked ? '扫码登录后，查看你创建和收藏的歌单。' :
       model.items.length ? '已加载 ' + model.items.length + ' 张歌单' : '';
     describeCollection({ empty: !model.items.length, login: model.locked });
   } else if (discover) {
@@ -868,15 +887,14 @@ function renderCollection() {
   }
   back.hidden = !detail || !previousCollection;
   get('back-label').textContent = { library: bili ? '收藏夹' : podcast ? '我的订阅' : '我的歌单',
-    favorites: '收藏节目', home: '主页', search: '搜索结果', following: '关注的 UP 主' }[previousCollection?.type] ?? '返回';
+    favorites: '本机收藏节目', home: '主页', search: '搜索结果', following: '关注的 UP 主' }[previousCollection?.type] ?? '返回';
   more.hidden = model.next === null || (!model.items.length && model.next === 0);
   more.disabled = false;
   more.textContent = '加载更多';
   if (model.next === null && !model.items.length && !model.locked && !savedPodcasts && !savedItems && !localQueue) {
     resultStatus.textContent = bili ? (biliSearch ? '没有找到匹配结果。' : following ? '账号还没有关注的 UP 主。' :
       library ? '账号还没有收藏夹。' : '这个列表里还没有可显示的视频。') :
-      library ? (podcast ? '小宇宙没有返回任何订阅。' : '网易云没有返回任何歌单。') :
-      mobileQueue ? '手机 App 的播放列表为空。' :
+      podcastList ? podcastList.empty : library ? '网易云没有返回任何歌单。' :
       detail ? (podcast ? '公开页暂无可显示的单集。' : '这张歌单没有可显示的歌曲。') :
         discover ? (podcast ? '播客目录暂无热门节目。' : '暂时没有推荐歌单。') : '没有找到匹配结果。';
   }
@@ -956,9 +974,23 @@ function renderCollection() {
     if (!playlists) {
       const actions = el('div', 'row-actions');
       const favorite = iconAction('heart', '', 'track-favorite');
-      labelFavorite(favorite, isPodcast, saved.has(itemKey));
-      favorite.addEventListener('click', () => toggleTrackFavorite(item, provider, favorite, index));
+      const online = isPodcast && !!podcastAccount.token;
+      if (online) {
+        favorite.disabled = podcastWrites.has('favorite:' + item.id);
+        labelFavorite(favorite, true, item.favorited === true);
+        if (savedItems && !item.favorited) actionLabel(favorite, '同步收藏到小宇宙');
+        else if (item.favorited === undefined) actionLabel(favorite, '管理小宇宙单集收藏');
+        favorite.addEventListener('click', () => setPodcastItem('favorite', item, favorite, model, index));
+      } else {
+        labelFavorite(favorite, isPodcast, saved.has(itemKey));
+        favorite.addEventListener('click', () => toggleTrackFavorite(item, provider, favorite, index));
+      }
       actions.append(favorite);
+      if (online && savedItems) {
+        const remove = iconAction('close', '移除本机收藏', 'queue-remove');
+        remove.addEventListener('click', () => toggleTrackFavorite(item, provider, favorite, index));
+        actions.append(remove);
+      }
       if (localQueue) {
         const remove = iconAction('close', '从本机队列移除', 'queue-remove');
         remove.disabled = trackKey(queue[queueIndex]) === itemKey;
@@ -1387,6 +1419,60 @@ function labelQueueAction(button, missing, added, active) {
   button.disabled = !!missing || added || active;
 }
 
+async function setPodcastItem(action, item, button, model, index) {
+  const token = podcastAccount.token;
+  const key = action + ':' + item.id;
+  if (!token || podcastWrites.has(key)) return;
+  const subscription = action === 'subscribe';
+  const field = subscription ? 'subscribed' : 'favorited';
+  const list = subscription ? 'library' : 'podcast-cloud-favorites';
+  podcastWrites.add(key);
+  button.disabled = true;
+  let changed = false;
+  try {
+    let value = item[field];
+    if (!subscription && value === undefined && model.type !== 'track-favorites') {
+      const { items } = await api('podcast/episode', { id: item.id }, undefined, true);
+      if (podcastAccount.token !== token) return;
+      value = items[0]?.favorited;
+      if (typeof value !== 'boolean') throw new Error('暂时无法确认小宇宙的收藏状态。');
+    }
+    const confirmation = await api('podcast/' + action, { id: item.id, enabled: !value }, undefined, true, 'POST');
+    if (podcastAccount.token !== token) return;
+    const selected = confirmation[field];
+    item[field] = selected;
+    const savedView = sourceViews.get('xiaoyuzhou');
+    for (const view of new Set([model, collection, previousCollection, savedView?.collection, savedView?.previousCollection,
+      queueReturn?.model, queueReturn?.prior])) {
+      if (!view || (view.source !== 'xiaoyuzhou' && (subscription || view.type !== 'queue'))) continue;
+      if (view.type === list && view !== collection) view.needsRefresh = true;
+      if (view.type === list && view === collection && !selected) view.items = view.items.filter(entry => entry.id !== item.id);
+      if (subscription && view.playlist?.id === item.id) view.playlist[field] = selected;
+      for (const entry of view.items) {
+        if (entry.id === item.id && (view.type !== 'queue' || entry.source === 'xiaoyuzhou')) entry[field] = selected;
+      }
+    }
+    changed = true;
+  } catch (error) {
+    if (collection === model && podcastAccount.token === token) resultStatus.textContent = error.message || '暂时无法同步，请重试。';
+  } finally {
+    podcastWrites.delete(key);
+    button.disabled = false;
+    if (changed && collection === model) {
+      renderCollection();
+      if (!subscription) {
+        (results.children[Math.min(index, results.children.length - 1)]?.querySelector('.track-favorite') ?? podcastCloudFavorites).focus();
+      }
+      resultStatus.textContent = subscription ? (item[field] ? '已同步订阅。' : '已取消订阅。') :
+        (item[field] ? '已同步收藏。' : '已取消收藏。');
+    } else if (changed && collection?.source === 'xiaoyuzhou' && collection.type === list) {
+      openPodcastList(list);
+    } else if (!button.isConnected && collection?.source === 'xiaoyuzhou' && podcastAccount.token === token) {
+      renderCollection();
+    }
+  }
+}
+
 function toggleTrackFavorite(item, provider, button, index) {
   const entries = readTracks(trackFavoritesKey);
   const key = trackKey(item, provider);
@@ -1695,8 +1781,10 @@ more.addEventListener('click', loadPage);
 home.addEventListener('click', openHome);
 myPlaylists.addEventListener('click', openLibrary);
 podcastFavorites.addEventListener('click', openFavorites);
+podcastUpdates.addEventListener('click', () => openPodcastList('podcast-updates'));
+podcastCloudFavorites.addEventListener('click', () => openPodcastList('podcast-cloud-favorites'));
 trackFavorites.addEventListener('click', openTrackFavorites);
-cloudQueue.addEventListener('click', openCloudQueue);
+cloudQueue.addEventListener('click', () => openPodcastList('cloud-queue'));
 watchLater.addEventListener('click', () => openBiliList('watch-later'));
 biliFollowing.addEventListener('click', () => openBiliList('following'));
 biliUpdates.addEventListener('click', openBiliUpdates);
@@ -1710,13 +1798,16 @@ updateToggle.addEventListener('click', () => {
   videoUpdates.enable(enabled);
 });
 queueToggle.addEventListener('click', toggleQueue);
-collectionSync.addEventListener('click', () => collection?.type === 'updates' ? openBiliUpdates() : openCloudQueue());
+collectionSync.addEventListener('click', () => {
+  if (collection?.type === 'updates') openBiliUpdates();
+  else if (collection?.source === 'xiaoyuzhou' && Object.hasOwn(podcastLists, collection.type)) openPodcastList(collection.type);
+});
 get('empty-login').addEventListener('click', () => accountFor(source).start());
 get('collection-play').addEventListener('click', () => {
   if (collection?.type === 'queue') return playAt(queueIndex < 0 ? adjacentTrack(1) : queueIndex);
-  if (collection && ['playlist', 'episode', 'cloud-queue', 'track-favorites'].includes(collection.type)) playFrom(collection);
+  if (collection && ['playlist', 'episode', 'cloud-queue', 'track-favorites', 'podcast-updates', 'podcast-cloud-favorites'].includes(collection.type)) playFrom(collection);
 });
-get('collection-save').addEventListener('click', () => {
+function toggleLocalShow() {
   const item = collection?.playlist;
   if (!item || collection.source !== 'xiaoyuzhou' || collection.type !== 'playlist') return;
   const entries = favorites();
@@ -1724,7 +1815,14 @@ get('collection-save').addEventListener('click', () => {
   const next = isSaved ? entries.filter(saved => saved.id !== item.id) : [item, ...entries];
   if (writeLocal(favoritesKey, JSON.stringify(next))) renderCollection();
   else resultStatus.textContent = '本机无法保存收藏。';
+}
+get('collection-save').addEventListener('click', event => {
+  const item = collection?.playlist;
+  if (!item || collection.source !== 'xiaoyuzhou' || collection.type !== 'playlist') return;
+  if (podcastAccount.token) void setPodcastItem('subscribe', item, event.currentTarget, collection);
+  else toggleLocalShow();
 });
+get('podcast-remove-local').addEventListener('click', toggleLocalShow);
 back.addEventListener('click', () => {
   const model = previousCollection;
   if (model) {
